@@ -1,16 +1,3 @@
-===================================================================
-raj@acloudfan.com
-
-This repository is part of a course put together by Rajeev Sakhuja
-
-Course title: Amazon Aurora PostgreSQL from A to Z
-
-Check out the course preview: 
-https://courses.pragmaticpaths.com/p/aurora-postgresql
-
-===================================================================
-
-
 ====================================
 Setup local development environment
 Works on Mac/Windows/Ubuntu
