@@ -1,0 +1,16 @@
+{
+    "rules": [
+        {
+            "rule-type": "selection",
+            "rule-id": "523409273",
+            "rule-name": "select_all_sakila_tables",
+            "object-locator": {
+                "schema-name": "sakila",
+                "table-name": "%"
+            },
+            "rule-action": "include",
+            "filters": []
+        }
+    ]
+}
+

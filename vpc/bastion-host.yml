@@ -1,0 +1,149 @@
+---
+## 
+## Creates an EC2 host to interact with DB cluster
+##
+## Changelog:
+##
+## Dependencies:
+## none
+##
+## This sample code is made available under the MIT-0 license. See the LICENSE file.
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: Host for interacting with the DB cluster
+## Parameters
+Parameters:
+  TemplateName:
+    Type: String
+    Default: rdsa-bastion-host
+    Description: Name used for different elements created.
+  KeyName:
+    Description: Amazon EC2 KeyPair
+    Default: ''
+    # Type: AWS::EC2::KeyPair::KeyName
+    Type: String
+  BastionHostInstanceName:
+    Description: Name of the Bastion Host Instance
+    Default: 'RDSA Bastion Host Instance'
+    Type: String
+  VpcId:
+    Description: Enter the VPC ID
+    Type: AWS::EC2::VPC::Id
+  PublicSubnetIds:
+    Description: Enter the Public Subnets
+    Type: AWS::EC2::Subnet::Id
+  InstanceType:
+    Description: Instance family for the test instance
+    Default: t3.medium
+    Type: String
+    AllowedValues: 
+      - "t2.micro"
+      - "t2.small"
+      - "t3.micro"
+      - "t3.small"
+      - "t3.medium"
+  # https://aws.amazon.com/blogs/compute/query-for-the-latest-amazon-linux-ami-ids-using-aws-systems-manager-parameter-store/
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+
+# Conditions
+Conditions:
+  HasNoKeyName: !Equals [!Ref KeyName, '']
+
+# Resources
+Resources:
+
+  # Bastion Host Security Group
+  HostSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Open Port 22 for ssh
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: "22"    # SSH
+          ToPort: "22"
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: "8080"  # Used for PgAdmin
+          ToPort: "8080"
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: "3306"  # Allow connection to local mysql from DMS
+          ToPort: "3306"
+          CidrIp: 10.0.0.0/16
+        - IpProtocol: tcp
+          FromPort: "3389"  # Windows RDP
+          ToPort: "3389"
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: "8082"  # Future use
+          ToPort: "8082"
+          CidrIp: 0.0.0.0/0
+
+
+  # Bastion host role
+  BastionHostRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${TemplateName}-bastion-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - sts:AssumeRole
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+
+  # Bastion host profile
+  BastionHostInstanceProfile: 
+    Type: "AWS::IAM::InstanceProfile"
+    DependsOn: BastionHostRole
+    Properties: 
+      Path: "/"
+      Roles: 
+        - !Ref BastionHostRole
+
+  # Bastion host EC2 instance
+  BastionEC2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: [BastionHostInstanceProfile, HostSecurityGroup, BastionHostRole]
+    Properties:
+      InstanceType: !Ref InstanceType
+      # ImageId:
+        # Fn::FindInMap:
+        #   - RegionMap
+        #   - !Ref AWS::Region
+        #   - AMI
+      ImageId: !Ref LatestAmiId
+      SecurityGroupIds:
+        - !Ref HostSecurityGroup
+      SubnetId: !Ref PublicSubnetIds
+      IamInstanceProfile: !Ref BastionHostInstanceProfile
+      Tags:
+        - Key: Name
+          #Value: "RDSA Bastion Host Instance"
+          Value: !Ref BastionHostInstanceName
+      # KeyName: !Ref KeyName
+      KeyName: !If [HasNoKeyName,  !Ref AWS::NoValue , !Ref KeyName]
+
+Outputs:
+  BastionHostIP:
+    Description: The Public Ip
+    Value: !GetAtt BastionEC2Instance.PublicIp
+  ConnectionCMD:
+    Value:
+      !Join [
+        "",
+        [
+          ssh -A -J ec2-user@,
+          !GetAtt BastionEC2Instance.PublicIp
+        ],
+      ]
+    Description: Copy and run it in your shell
